@@ -1,4 +1,6 @@
-import { ReactNode, createContext, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState, useCallback } from 'react'
+import { api } from '../lib/axios'
+import { createContext } from 'use-context-selector'
 
 export interface Transaction {
   id: number
@@ -9,9 +11,17 @@ export interface Transaction {
   createdAt: string
 }
 
+interface CreateTransactionInputs {
+  description: string
+  price: number
+  category: string
+  type: 'outcome' | 'income'
+}
+
 interface TransactionsContextType {
   transactions: Transaction[]
-  fetchTransactions: () => Promise<void>
+  fetchTransactions: (query?: string) => Promise<void>
+  createTransaction: (data: CreateTransactionInputs) => Promise<void>
 }
 
 interface TransactionsProviderProps {
@@ -23,22 +33,45 @@ export const TransactionsContext = createContext({} as TransactionsContextType)
 export function TransactionsProvider({ children }: TransactionsProviderProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
 
-  async function fetchTransactions() {
-    const response = await fetch('http://localhost:3333/transactions')
-    const data = await response.json()
+  const fetchTransactions = useCallback(async (query?: string) => {
+    const response = await api.get('/transactions', {
+      params: {
+        _sort: 'createdAt',
+        _order: 'desc',
+        q: query,
+      },
+    })
 
-    setTransactions(data)
-  }
+    setTransactions(response.data)
+  }, [])
+
+  const createTransaction = useCallback(
+    async (data: CreateTransactionInputs) => {
+      const { description, price, category, type } = data
+
+      const response = await api.post('/transactions', {
+        description,
+        price,
+        category,
+        type,
+        createdAt: new Date(),
+      })
+
+      setTransactions((prevState) => [...prevState, response.data])
+    },
+    [],
+  )
 
   useEffect(() => {
     fetchTransactions()
-  }, [])
+  }, [fetchTransactions])
 
   return (
     <TransactionsContext.Provider
       value={{
         transactions,
         fetchTransactions,
+        createTransaction,
       }}
     >
       {children}
